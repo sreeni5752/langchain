@@ -1,7 +1,15 @@
-from langchain import PromptTemplate
-from langchain.chat_models import ChatOpenAI
+from dotenv import load_dotenv
+from langchain import hub
 
-from langchain.agents import initialize_agent, Tool, AgentType
+load_dotenv()
+
+from langchain.agents import (
+    create_react_agent,
+    AgentExecutor,
+)
+from langchain_core.prompts import PromptTemplate
+from langchain_core.tools import Tool
+from langchain_openai import ChatOpenAI
 
 from tools.tools import get_profile_url
 
@@ -11,6 +19,9 @@ def lookup(name: str) -> str:
     template = """given the full name {name_of_person} I want you to get it me a link to their Linkedin profile page.
                           Your answer should contain only a URL"""
 
+    prompt_template = PromptTemplate(
+        template=template, input_variables=["name_of_person"]
+    )
     tools_for_agent = [
         Tool(
             name="Crawl Google 4 linkedin profile page",
@@ -19,15 +30,13 @@ def lookup(name: str) -> str:
         )
     ]
 
-    agent = initialize_agent(
-        tools=tools_for_agent,
-        llm=llm,
-        agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-        verbose=True,
-    )
-    prompt_template = PromptTemplate(
-        template=template, input_variables=["name_of_person"]
+    react_prompt = hub.pull("hwchase17/react")
+    agent = create_react_agent(llm=llm, tools=tools_for_agent, prompt=react_prompt)
+    agent_executor = AgentExecutor(agent=agent, tools=tools_for_agent, verbose=True)
+
+    result = agent_executor.invoke(
+        input={"input": prompt_template.format_prompt(name_of_person=name)}
     )
 
-    linked_profile_url = agent.run(prompt_template.format_prompt(name_of_person=name))
+    linked_profile_url = result["output"]
     return linked_profile_url
